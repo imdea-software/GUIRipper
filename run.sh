@@ -1,31 +1,80 @@
 #!/bin/bash
 
+if [ $# -ne 5 ]; then
+    echo "Usage: run.sh <opt> <explore_mode> <apk_path> <sdk_api> <abi_arch>"
+    echo "    opt:                    @TODO: description"
+    echo "        * prepare           @TODO: description"
+    echo "        * ripper            @TODO: description"
+    echo "        * createSnapshot    @TODO: description"
+    echo "        * log               @TODO: description"
+    echo "        * logf              @TODO: description"
+    echo "        * tasklist          @TODO: description"
+    echo "        * shutdown          @TODO: description"
+    echo "    explore_mode:           @TODO: description"
+    echo "        * random            @TODO: description"
+    echo "        * systematic        @TODO: description"
+    echo "    sdk_api:                @TODO: description"
+    echo "        * 10                @TODO: description"
+    echo "        * 11                @TODO: description"
+    echo "        * 12                @TODO: description"
+    echo "        * ...               @TODO: description"
+    echo "    abi_arch:               @TODO: description"
+    echo "        * x86               @TODO: description"
+    echo "        * armeabi-v7a       @TODO: description"
+    echo ""
+    echo "Example: run.sh prepare systematic apks/tomdroid-0.7.5.apk 10 armeabi-v7a"
+fi
 
-#System Path
-JAVA_CMD=/usr/bin/java
-JARSIGNER_CMD=/usr/bin/jarsigner
-ANDROID_HOME=/home/vagrant/android-sdk-linux
-EMULATORPATH=$ANDROID_HOME/tools
-PLATFORMPATH=$ANDROID_HOME/platform-tools
-BUILDTOOLS=$ANDROID_HOME/build-tools/20.0.0
+# prepare | ripper | createSnapshot | log | logf | tasklist | shutdown
+OPT=$1
 
-#AVD Path
-#EMULATORTASK=$EMULATORPATH/emulator-arm
-EMULATORTASK=$EMULATORPATH/emulator
-AVDNAME=gui-ripper
-ANDROIDCONF=/home/vagrant/.android
-SNAPSHOTPATH=$ANDROIDCONF/avd/$AVDNAME.avd/snapshots.img
+# random | systematic
+EXPLORE=$2
 
-#App Information
 #APKPATH=apks/tomdroid-0.7.5.apk
 APKPATH=$3
-#APPPACKAGE=org.tomdroid
+
+# API
+API=${4:-10}
+
+# ARCH
+ARCH=${5:-x86}
+ARM_ON=0
+EMU_ARCH="x86"
+if [[ ${ARCH} == *"arm"* ]]; then
+  ARM_ON=1
+  EMU_ARCH="arm"
+fi
+
+
+
+
+#System Path
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+JAVA_CMD=/usr/bin/java
+JARSIGNER_CMD=$(which jarsigner)
+ANDROID_HOME=${ANDROID_HOME_SDK}
+EMULATORPATH=${ANDROID_HOME}/tools
+PLATFORMPATH=${ANDROID_HOME}/platform-tools
+BUILDTOOLS=${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS_VERSION}
+TOOLDIR=${DIR}
+
+#AVD Path
+EMULATORCMD=emulator64-${EMU_ARCH}
+EMULATORTASK=${EMULATORPATH}/${EMULATORCMD}
+AVD_NAME="gui-ripper_${ARCH}"
+
+ANDROIDCONF=/root/.android
+SNAPSHOTPATH=$ANDROIDCONF/avd/${AVD_NAME}.avd/snapshots.img
+
+# App Information
+# i.e = APPPACKAGE=org.tomdroid
 APPPACKAGE=`aapt dump badging $APKPATH | grep package | awk -F"'" '{print $2}'`
-#CLASSPACKAGE=org.tomdroid.ui.Tomdroid
+# i.e = CLASSPACKAGE=org.tomdroid.ui.Tomdroid
 CLASSPACKAGE=`aapt dump badging $APKPATH | grep launchable-activity | awk -F"'" '{print $2}'`
 DEVICEPATH=/data/data/$APPPACKAGE/files
 
-echo Testing APK $APKPATH package=$APPPACKAGE class=$CLASSPACKAGE
+echo "Testing APK $APKPATH package=$APPPACKAGE class=$CLASSPACKAGE"
 
 
 #Output Experiment Path
@@ -36,7 +85,6 @@ RESTOREPATH=$EXPPATH/restore
 SCREENSHOTSPATH=$EXPPATH/screenshots
 
 #Tool Information
-#ROOT_DIR=/vagrant/guiripper/GuiRipperV1.1
 ROOT_DIR=$TOOLDIR
 BATCHPATH=$ROOT_DIR/batch
 DATAPATH=$ROOT_DIR/data
@@ -46,10 +94,8 @@ SMALIPATH=$TOOLSPATH/smali
 TESTPACKAGE=it.unina.androidripper
 RIPPERPATH=/data/data/$TESTPACKAGE/files
 
-# random | systematic
-EXPLORE=$2
 
-if [ "$2" == "random" ]; then
+if [ "${EXPLORE}" == "random" ]; then
   TESTCLASS=guitree.NomadEngine
   SPLIT_CODE=1
 else
@@ -66,13 +112,60 @@ fi
 ## Set the number of events to a high number, and then invoke this script with a timeout of 1 hour.
 NUM_EVENTS=50000000
 
-case  $1  in
+
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+
+case ${OPT} in
 
 ################################################################################
   prepare)
-  echo Running firstBoot
-  $EMULATORTASK -avd $AVDNAME -partition-size 512 -snapshot $SNAPSHOTPATH -no-snapshot-load -wipe-data &
-  $ROOT_DIR/waitForEmu.sh  
+  echo "prepare: Running firstBoot..."
+
+  # AVD:
+  #   * x86: ERROR WITH android-10 and x86
+  #       echo no | android create avd -n ${AVD_NAME} -t android-${API} -c 1024M -b x86 --snapshot
+  #   * armeabi-v7a:
+  #       echo no | android create avd -f -n ${AVD_NAME} -t android-${API} --abi default/armeabi-v7a --sdcard 1024M
+
+  # problems with "|". eval split in two diferent comands
+  # AVD_CMD="android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &"
+  # echo -n "    * AVD = echo no | ${AVD_CMD} : "
+  # echo no | eval ${AVD_CMD}
+  echo "    * AVD = \"echo no | android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &\""
+  echo no | android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &
+  wait $! # waiting for avd
+  [[ $? -ne 0 ]] && echo "ERROR" && exit 1 || echo "OK"
+
+
+  EMU_OPTS=""
+  [[ ${DEBUG} -eq 1 ]] && EMU_OPTS="${EMU_OPTS} -debug-all"
+  [[ ${DEBUG} -eq 1 ]] && EMU_OPTS="${EMU_OPTS} -verbose"
+  [[ ${SHOWEMU} -eq 0 ]] && EMU_OPTS="${EMU_OPTS} -no-window"
+  EMU_OPTS="${EMU_OPTS} -avd ${AVD_NAME}"
+  EMU_OPTS="${EMU_OPTS} -partition-size 512"
+  EMU_OPTS="${EMU_OPTS} -snapshot ${SNAPSHOTPATH}"
+  ####
+  EMU_OPTS="${EMU_OPTS} -no-snapshot-load"
+  ####
+  EMU_OPTS="${EMU_OPTS} -wipe-data"
+  [[ ${SHOWEMU} -eq 0 ]] && EMU_OPTS="${EMU_OPTS} -no-window"
+  [[ ${ARM_ON} -eq 1 ]] && EMU_OPTS="${EMU_OPTS} -gpu off -qemu"
+
+  OTHER_OPTS=""
+  EMU_LOG_FILE="emu_${API}_${ARCH}_AS${AVD_SCRATCH}_${EMULATORCMD}_${OPT}.log"
+  EMU_LOG_PATH="${EMU_LOG_DIR}${EMU_LOG_FILE}"
+  [[ ${DEBUG} -eq 1 ]] && OTHER_OPTS="${OTHER_OPTS} &> ${EMU_LOG_PATH}" || OTHER_OPTS="${OTHER_OPTS} > /dev/null"
+  [[ ${FREEZE} -eq 0 ]] && OTHER_OPTS="${OTHER_OPTS} &"
+
+  EMU_CMD="${EMULATORTASK} ${EMU_OPTS} ${OTHER_OPTS}"
+  echo "    * EMU = ${EMU_CMD}"
+  eval ${EMU_CMD}
+  ${ROOT_DIR}/waitForEmu.sh
+
 #  ;;
 #
 ################################################################################
@@ -127,13 +220,18 @@ case  $1  in
   rm -rf $DATAPATH/*.apk
   echo "Deploy Completed"
 
+  sleep 15
+
   echo "Preparation successful. Shutting down emulator"
   adb emu kill
+  sleep 5
+  $PLATFORMPATH/adb kill-server
+  sleep 5
   ;;
 
 ################################################################################
   createSnapshot)
-  $EMULATORTASK -avd $AVDNAME -partition-size 512 -snapshot $SNAPSHOTPATH &
+  ${EMULATORTASK} -avd ${AVD_NAME} -partition-size 512 -snapshot $SNAPSHOTPATH &
   $ROOT_DIR/waitForEmu.sh
   $PLATFORMPATH/adb shell chmod 777 $RIPPERPATH
   $PLATFORMPATH/adb shell rm $RIPPERPATH/*
@@ -147,9 +245,39 @@ case  $1  in
   echo "** Start Random Ripping"
   while true; do
     $PLATFORMPATH/adb start-server
-    $EMULATORTASK -avd $AVDNAME -partition-size 512 -snapshot $SNAPSHOTPATH -no-snapshot-save &
-    #sleep $(WAITFORAVD)
-    $ROOT_DIR/waitForEmu.sh
+
+
+    ###
+    ### EMU
+    ###
+    EMU_OPTS=""
+    [[ ${DEBUG} -eq 1 ]] && EMU_OPTS="${EMU_OPTS} -debug-all"
+    [[ ${DEBUG} -eq 1 ]] && EMU_OPTS="${EMU_OPTS} -verbose"
+    [[ ${SHOWEMU} -eq 0 ]] && EMU_OPTS="${EMU_OPTS} -no-window"
+    EMU_OPTS="${EMU_OPTS} -avd ${AVD_NAME}"
+    EMU_OPTS="${EMU_OPTS} -partition-size 512"
+    EMU_OPTS="${EMU_OPTS} -snapshot ${SNAPSHOTPATH}"
+    ####
+    EMU_OPTS="${EMU_OPTS} -no-snapshot-save"
+    ####
+    [[ ${SHOWEMU} -eq 0 ]] && EMU_OPTS="${EMU_OPTS} -no-window"
+    [[ ${ARM_ON} -eq 1 ]] && EMU_OPTS="${EMU_OPTS} -gpu off -qemu"
+
+    OTHER_OPTS=""
+    EMU_LOG_DIR="${DIR}/"
+    EMU_LOG_FILE="emu_${API}_${ARCH}_AS${AVD_SCRATCH}_${EMULATORCMD}_${OPT}.log"
+    EMU_LOG_PATH="${EMU_LOG_DIR}${EMU_LOG_FILE}"
+    [[ ${DEBUG} -eq 1 ]] && OTHER_OPTS="${OTHER_OPTS} &> ${EMU_LOG_PATH}" || OTHER_OPTS="${OTHER_OPTS} > /dev/null"
+    [[ ${FREEZE} -eq 0 ]] && OTHER_OPTS="${OTHER_OPTS} &"
+
+    EMU_CMD="${EMULATORTASK} ${EMU_OPTS} ${OTHER_OPTS}"
+    echo "    * EMU = ${EMU_CMD}"
+    eval ${EMU_CMD}
+    ${ROOT_DIR}/waitForEmu.sh
+    ###
+    ### EMU
+    ###
+
     mkdir -p $EXPPATH
     $PLATFORMPATH/adb logcat >> $EXPPATH/log-all.txt &
     $PLATFORMPATH/adb logcat androidripper:i AndroidRuntime:e *:s >> $EXPPATH/log-filtered.txt &
@@ -168,11 +296,11 @@ case  $1  in
 
     echo "unlock device"
     $PLATFORMPATH/adb shell input keyevent 82
-    sleep 5
-    
+    sleep 15
+
     echo "running instr"
-    $PLATFORMPATH/adb shell am instrument -w -e coverage false -e class $TESTPACKAGE.$TESTCLASS \
-                                  $TESTPACKAGE/android.test.InstrumentationTestRunner >> $EXPPATH/test.txt
+    # NOTE: instrument apk (if you have emma in the classpath it is enough to change coverage false to true)
+    $PLATFORMPATH/adb shell am instrument -w -e coverage false -e class $TESTPACKAGE.$TESTCLASS $TESTPACKAGE/android.test.InstrumentationTestRunner >> $EXPPATH/test.txt
     if `ls $FILESPATH/$extCounter/*.xml  &> /dev/null` ; then \
       mv $FILESPATH/$extCounter/*.xml $RESTOREPATH/$extCounter/; \
       mv $FILESPATH/$extCounter/*.bak $RESTOREPATH/$extCounter/; \
@@ -180,10 +308,10 @@ case  $1  in
       mv $FILESPATH/$extCounter/*.txt $RESTOREPATH/$extCounter/; \
     fi
     $PLATFORMPATH/adb pull $DEVICEPATH $FILESPATH/$extCounter
- 
+
     echo "copy coverage for run" $extCounter
     adb shell am broadcast -a edu.gatech.m3.emma.COLLECT_COVERAGE
-    adb pull /mnt/sdcard/coverage.ec $COVERAGEPATH/$extCounter/coverage.ec   
+    adb pull /mnt/sdcard/coverage.ec $COVERAGEPATH/$extCounter/coverage.ec
 
     if [ -f $FILESPATH/*.jpg ] ; then \
       cp $FILESPATH/*.jpg $SCREENSHOTSPATH
@@ -197,7 +325,7 @@ case  $1  in
       fi
       $JAVA_CMD -jar $TOOLSPATH/GuiTSplitter.jar $FILESPATH $SPLIT_CODE
       $JAVA_CMD -jar $TOOLSPATH/ActTSplitter.jar $FILESPATH $SPLIT_CODE
-      $JAVA_CMD -jar $TOOLSPATH/TasklistDiet.jar $FILESPATH $DATAPATH/preferences.xml 
+      $JAVA_CMD -jar $TOOLSPATH/TasklistDiet.jar $FILESPATH $DATAPATH/preferences.xml
     fi
 
     $PLATFORMPATH/adb emu kill
@@ -223,8 +351,8 @@ case  $1  in
     fi
 
     $PLATFORMPATH/adb push $FILESPATH/$extCounter $DEVICEPATH
-  done 
- 
+  done
+
   ;;
 
 ################################################################################

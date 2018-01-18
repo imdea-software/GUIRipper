@@ -1,0 +1,23 @@
+
+# ignore changes in build files
+preferences.xml
+tools/smali/AndroidManifest.xml
+tools/smali/build/apk/AndroidManifest.xml
+tools/smali/build/apk/classes.dex
+tools/smali/build/apk/resources.arsc
+tools/diet/activity/
+tools/diet/guitree/
+
+# ignore build files
+data/build.txt
+
+# ignore java class
+*class
+
+# ignore all inside
+apks/
+output-exp/
+
+# ignore this tmp or log files
+emu*.log
+.tmp
