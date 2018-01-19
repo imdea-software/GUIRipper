@@ -15,7 +15,9 @@ data/build.txt
 *class
 
 # ignore all inside
-apks/
+apks/**
+!apks/README.md
+
 output-exp/
 
 # ignore this tmp or log files
