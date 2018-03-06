@@ -35,7 +35,7 @@ EXPLORE=$2
 APKPATH=$3
 
 # API
-API=${4:-10}
+API=${4:-16}
 
 # ARCH
 ARCH=${5:-x86}
@@ -62,7 +62,8 @@ TOOLDIR=${DIR}
 #AVD Path
 EMULATORCMD=emulator64-${EMU_ARCH}
 EMULATORTASK=${EMULATORPATH}/${EMULATORCMD}
-AVD_NAME="gui-ripper_${ARCH}"
+# AVD_NAME="gui-ripper_${ARCH}"
+AVD_NAME="android-${API}_${ARCH}"
 
 ANDROIDCONF=/root/.android
 SNAPSHOTPATH=$ANDROIDCONF/avd/${AVD_NAME}.avd/snapshots.img
@@ -135,10 +136,30 @@ case ${OPT} in
   # AVD_CMD="android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &"
   # echo -n "    * AVD = echo no | ${AVD_CMD} : "
   # echo no | eval ${AVD_CMD}
-  echo "    * AVD = \"echo no | android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &\""
-  echo no | android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &
-  wait $! # waiting for avd
-  [[ $? -ne 0 ]] && echo "ERROR" && exit 1 || echo "OK"
+
+  if [[ ${ARCH} == *"arm"* ]]; then
+    echo "    * AVD = \"echo no | android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &\""
+    echo no | android create avd -n ${AVD_NAME} -t android-${API} --sdcard 1024M --abi default/${ARCH} --snapshot &
+    wait $! # waiting for avd
+    [[ $? -ne 0 ]] && echo "ERROR" && exit 1 || echo "OK"
+  else
+    echo -n "    - Copying emulator template '${AVD_NAME}'... "
+    cp -r ${ANDROTEST_AVD_TEMPLATES_DOCKER_PATH}/${AVD_NAME}.* ${ANDROID_AVD_HOME}
+    dir1_ls=$(ls ${ANDROTEST_AVD_TEMPLATES_DOCKER_PATH} | grep ${AVD_NAME})
+    dir1=$(ls ${ANDROTEST_AVD_TEMPLATES_DOCKER_PATH} | grep ${AVD_NAME} | wc -l)
+    dir1_ls=$(ls ${ANDROID_AVD_HOME} | grep ${AVD_NAME})
+    dir2=$(ls ${ANDROID_AVD_HOME} | grep ${AVD_NAME} | wc -l)
+    if [[ ${dir1} -ne ${dir2} ]] ; then
+      echo "ERROR: dir1: ${dir1} vs dir2: ${dir2}";
+      echo ${dir1_ls}
+      ls ${ANDROTEST_AVD_TEMPLATES_DOCKER_PATH} | grep ${AVD_NAME};
+      echo "    dir2 (ANDROID_AVD_HOME): ";
+      echo ${dir2_ls}
+      exit 1;
+    else
+      echo "OK";
+    fi
+  fi
 
 
   EMU_OPTS=""
@@ -224,9 +245,9 @@ case ${OPT} in
 
   echo "Preparation successful. Shutting down emulator"
   adb emu kill
-  sleep 5
-  $PLATFORMPATH/adb kill-server
-  sleep 5
+  # sleep 5
+  # # $PLATFORMPATH/adb kill-server
+  # sleep 5
   ;;
 
 ################################################################################
